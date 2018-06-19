@@ -13,10 +13,22 @@ fwd_rev_barcodes = [
 (["A", "G", "A", "A", "G"],["A", "G", "A", "A", "G", "T", "C", "T", "A", "A"]),
 (["T", "A", "C", "C", "T"],["T", "A", "C", "C", "T", "T", "G", "C", "T", "G", "G"]), 
 (["G", "T", "A", "G", "G"],["G", "T", "A", "G", "G", "C", "A", "A", "T"]),
-(["A", "C", "G", "T", "T"],["A", "C", "G", "T", "T", "C", "G", "A"])
+(["A", "C", "G", "T", "T"],["A", "C", "G", "T", "T", "C", "G", "A"]),
+(["C", "G", "T", "A", "A"],["G", "A", "A", "A", "T", "C", "C"])
+(["G", "G", "A", "C", "T"],["C", "A", "G", "C", "G", "T", "A", "G"])
+(["T", "A", "C", "C", "T"],["A", "G", "A", "A", "G", "T", "C", "T", "A", "A"])
+(["G", "T", "A", "G", "G"],["T", "A", "C", "C", "T", "T", "G", "C", "T", "G", "G"])
+(["A", "C", "G", "T", "T"],["G", "T", "A", "G", "G", "C", "A", "A", "T"]),
+(["C", "G", "T", "A", "A"],["A", "C", "G", "T", "T", "C", "G", "A"]),
+(["G", "G", "A", "C", "T"],["G", "A", "A", "A", "T", "C", "C"]),
+(["G", "T", "A", "G", "G"],["A", "G", "A", "A", "G", "T", "C", "T", "A", "A"]),
+(["A", "C", "G", "T", "T"],["T", "A", "C", "C", "T", "T", "G", "C", "T", "G", "G"]),
+(["C", "G", "T", "A", "A"],["G", "T", "A", "G", "G", "C", "A", "A", "T"]),
+(["G", "G", "A", "C", "T"],["A", "C", "G", "T", "T", "C", "G", "A"]),
+(["A", "G", "A", "A", "G"],["C", "A", "G", "C", "G", "T", "A", "G"])
 ]
 
-illumina_adapter = list('ACACTCTTTCCCTACACGACGCTCTTCCGATCT')
+illumina_adapter = [list('ACACTCTTTCCCTACACGACGCTCTTCCGATCT'), list('TTCAGACGTGTGCTCTTCCGATCT')]
 
 quality_scores = ["<", "=", ">", "?", "@", "A", "B", "C", "D", "E", "F", ":", ";"]
 
@@ -97,13 +109,13 @@ def reverse_complement(seq):
 		reverse_seq.append(complement[base])
 	return reverse_seq
 
-def barcode(well, illumina_adapter, fwd_barcode, rev_barcode):
+def barcode(well, fwd_illumina_adapter, rev_illumina_adapter, fwd_barcode, rev_barcode):
 	## Generates complete sequence to include illumina adapter and each barcode ##
 	fwd_seqs = []
 	rev_seqs = []
 	for cell in well:
 		umi = list(np.random.choice(["G", "C", "A", "T"], size=20))
-		fwd_seq = illumina_adapter + fwd_barcode + cell + umi + reverse_complement(rev_barcode)
+		fwd_seq = fwd_illumina_adapter + fwd_barcode + cell + umi + reverse_complement(rev_barcode) + reverse_complement(rev_illumina_adapter)
 		rev_seq = reverse_complement(fwd_seq)
 		fwd_seqs.append(fwd_seq)
 		rev_seqs.append(rev_seq)
@@ -182,7 +194,7 @@ for i, well in enumerate(wells):
 
 
 last_generation = []
-for i in range(int(-1*(np.rint(len(wells)/2))), 0):
+for i in range(0, (num_of_generations**2)//2):
 	last_generation.append([])
 
 for i in range(int(-1*(np.rint(len(wells)/2))), 0):
@@ -191,9 +203,14 @@ for i in range(int(-1*(np.rint(len(wells)/2))), 0):
 fwd_barcoded_seqs = []
 rev_barcoded_seqs = []
 for i, (x, y) in enumerate(fwd_rev_barcodes):
-	fwd_well, rev_well = barcode(last_generation[i], illumina_adapter, x, y)
-	fwd_barcoded_seqs += amplify(fwd_well)
-	rev_barcoded_seqs += amplify(rev_well)
+	if i < len(last_generation):
+		print(i, (x,y))
+		fwd_well, rev_well = barcode(last_generation[i], illumina_adapter[0], illumina_adapter[1], x, y)
+		fwd_barcoded_seqs += amplify(fwd_well)
+		rev_barcoded_seqs += amplify(rev_well)
 
 fwd_reads = convert_to_str(fwd_barcoded_seqs)
 rev_reads = convert_to_str(rev_barcoded_seqs)
+
+generate_fastq(fwd_read_file, fwd_reads)
+generate_fastq(rev_read_file, rev_reads)
