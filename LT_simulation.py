@@ -164,55 +164,36 @@ def seq_filter(seq_list):
 	return chosen_seqs
 
 
-
-well_1 = []
-well_1_1 = []
-well_1_2 = []
-well_1_1_1 = []
-well_1_1_2 = []
-well_1_2_1 = []
-well_1_2_2 = []
-
-fwd_sequences = []
-rev_sequences = []
+wells = []
+for num in range(0, (2**num_of_generations)-1):
+	wells.append([])
 
 for x in range(0, initial_cell_count):
-	well_1.append(list(WT_seq))
+	wells[0].append(list(WT_seq))
 
-well_1 = cell_cycle(well_1, cut_freq, insert_freq, del_freq)
-well_1_1, well_1_2 = split_cells(well_1)
-
-well_1_1 = cell_cycle(well_1_1, cut_freq, insert_freq, del_freq)
-well_1_2 = cell_cycle(well_1_2, cut_freq, insert_freq, del_freq)
-well_1_1_1, well_1_1_2 = split_cells(well_1_1)
-well_1_2_1, well_1_2_2 = split_cells(well_1_2)
-
-well_1_1_1 = cell_cycle(well_1_1_1, cut_freq, insert_freq, del_freq)
-well_1_1_2 = cell_cycle(well_1_1_2, cut_freq, insert_freq, del_freq)
-well_1_2_1 = cell_cycle(well_1_2_1, cut_freq, insert_freq, del_freq)
-well_1_2_2 = cell_cycle(well_1_2_2, cut_freq, insert_freq, del_freq)
+for i, well in enumerate(wells):
+	if i == 0:
+		wells[0] = cell_cycle(wells[0], cut_freq, insert_freq, del_freq)
+		wells[1], wells[2] = split_cells(well)
+	else:
+		wells[i] = cell_cycle(well, cut_freq, insert_freq, del_freq)
+		if ((2*i)+2) <= len(wells):
+			wells[(2*i)+1], wells[(2*i)+2] = split_cells(wells[i])
 
 
-well_1_1_1 = seq_filter(well_1_1_1)
-well_1_1_2 = seq_filter(well_1_1_2)
-well_1_2_1 = seq_filter(well_1_2_1)
-well_1_2_2 = seq_filter(well_1_2_2)
+last_generation = []
+for i in range(int(-1*(np.rint(len(wells)/2))), 0):
+	last_generation.append([])
 
-well_1_1_1_fwd, well_1_1_1_rev = barcode(well_1_1_1, illumina_adapter, fwd_rev_barcodes[0][0], fwd_rev_barcodes[0][1])
-well_1_1_2_fwd, well_1_1_2_rev = barcode(well_1_1_2, illumina_adapter, fwd_rev_barcodes[1][0], fwd_rev_barcodes[1][1])
-well_1_2_1_fwd, well_1_2_1_rev = barcode(well_1_2_1, illumina_adapter, fwd_rev_barcodes[2][0], fwd_rev_barcodes[2][1])
-well_1_2_2_fwd, well_1_2_2_rev = barcode(well_1_2_2, illumina_adapter, fwd_rev_barcodes[3][0], fwd_rev_barcodes[3][1])
+for i in range(int(-1*(np.rint(len(wells)/2))), 0):
+	last_generation[i] = seq_filter(wells[i])
 
-well_1_1_1_fwd = amplify(well_1_1_1_fwd)
-well_1_1_2_fwd = amplify(well_1_1_2_fwd)
-well_1_2_1_fwd = amplify(well_1_2_1_fwd)
-well_1_2_2_fwd = amplify(well_1_2_2_fwd)
+fwd_barcoded_seqs = []
+rev_barcoded_seqs = []
+for i, (x, y) in enumerate(fwd_rev_barcodes):
+	fwd_well, rev_well = barcode(last_generation[i], illumina_adapter, x, y)
+	fwd_barcoded_seqs += amplify(fwd_well)
+	rev_barcoded_seqs += amplify(rev_well)
 
-well_1_1_1_rev = amplify(well_1_1_1_rev)
-well_1_1_2_rev = amplify(well_1_1_2_rev)
-well_1_2_1_rev = amplify(well_1_2_1_rev)
-well_1_2_2_rev = amplify(well_1_2_2_rev)
-
-fwd_sequences = convert_to_str(well_1_1_1_fwd + well_1_1_2_fwd + well_1_2_1_fwd + well_1_2_2_fwd)
-rev_sequences = convert_to_str(well_1_1_1_rev + well_1_1_2_rev + well_1_2_1_rev + well_1_2_2_rev)
-
+fwd_reads = convert_to_str(fwd_barcoded_seqs)
+rev_reads = convert_to_str(rev_barcoded_seqs)
