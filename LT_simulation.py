@@ -1,4 +1,5 @@
 import numpy as np
+from datetime import datetime
 
 #WT_seq = 'CTTGTGGAAAGGACGAAACACCGGCCCAGACTGAGCACGTGAGGGTTAGAGCTAGAAATAGCAAGTTAACCTAAGGCTAGTCCGTTATCAACTTGAAAAAGTGGCACCGAGTCGGTGCTTTTTTTAAGCTTGGGCCGCTCGAGGTACCTCTCTACATA'
 # fwd_read_file = '/data/users/mscheche/simulation/fwd_reads.fastq'
@@ -14,10 +15,10 @@ fwd_rev_barcodes = [
 (["T", "A", "C", "C", "T"],["T", "A", "C", "C", "T", "T", "G", "C", "T", "G", "G"]), 
 (["G", "T", "A", "G", "G"],["G", "T", "A", "G", "G", "C", "A", "A", "T"]),
 (["A", "C", "G", "T", "T"],["A", "C", "G", "T", "T", "C", "G", "A"]),
-(["C", "G", "T", "A", "A"],["G", "A", "A", "A", "T", "C", "C"])
-(["G", "G", "A", "C", "T"],["C", "A", "G", "C", "G", "T", "A", "G"])
-(["T", "A", "C", "C", "T"],["A", "G", "A", "A", "G", "T", "C", "T", "A", "A"])
-(["G", "T", "A", "G", "G"],["T", "A", "C", "C", "T", "T", "G", "C", "T", "G", "G"])
+(["C", "G", "T", "A", "A"],["G", "A", "A", "A", "T", "C", "C"]),
+(["G", "G", "A", "C", "T"],["C", "A", "G", "C", "G", "T", "A", "G"]),
+(["T", "A", "C", "C", "T"],["A", "G", "A", "A", "G", "T", "C", "T", "A", "A"]),
+(["G", "T", "A", "G", "G"],["T", "A", "C", "C", "T", "T", "G", "C", "T", "G", "G"]),
 (["A", "C", "G", "T", "T"],["G", "T", "A", "G", "G", "C", "A", "A", "T"]),
 (["C", "G", "T", "A", "A"],["A", "C", "G", "T", "T", "C", "G", "A"]),
 (["G", "G", "A", "C", "T"],["G", "A", "A", "A", "T", "C", "C"]),
@@ -130,7 +131,7 @@ def generate_fastq(read_file, seq_list):
 	## Writes out to a text file in fastq format ##
 	with open(read_file, 'w') as file:
 		date = datetime.now().strftime('%H:%M:%S')
-		for seq in seqs:
+		for seq in seq_list:
 			file.write('@:' + date + '\n')
 			file.write(seq + '\n')
 			file.write('+\n')
@@ -194,8 +195,9 @@ for i, well in enumerate(wells):
 
 
 last_generation = []
-for i in range(0, (num_of_generations**2)//2):
+for i in range(0, (2**num_of_generations)//2):
 	last_generation.append([])
+print(len(last_generation))
 
 for i in range(int(-1*(np.rint(len(wells)/2))), 0):
 	last_generation[i] = seq_filter(wells[i])
@@ -204,7 +206,6 @@ fwd_barcoded_seqs = []
 rev_barcoded_seqs = []
 for i, (x, y) in enumerate(fwd_rev_barcodes):
 	if i < len(last_generation):
-		print(i, (x,y))
 		fwd_well, rev_well = barcode(last_generation[i], illumina_adapter[0], illumina_adapter[1], x, y)
 		fwd_barcoded_seqs += amplify(fwd_well)
 		rev_barcoded_seqs += amplify(rev_well)
