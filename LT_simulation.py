@@ -1,217 +1,237 @@
+import math
 import numpy as np
-from datetime import datetime
+import pickle
+import pprint
+import math
+from itertools import product
 
-#WT_seq = 'CTTGTGGAAAGGACGAAACACCGGCCCAGACTGAGCACGTGAGGGTTAGAGCTAGAAATAGCAAGTTAACCTAAGGCTAGTCCGTTATCAACTTGAAAAAGTGGCACCGAGTCGGTGCTTTTTTTAAGCTTGGGCCGCTCGAGGTACCTCTCTACATA'
-# fwd_read_file = '/data/users/mscheche/simulation/fwd_reads.fastq'
-# rev_read_file = '/data/users/mscheche/simulation/rev_reads.fastq'
-#WT seq from March 29 run
+INSERTION_LEN_RANGE = [0, 1, 2, 3, 4, 5, 6, 7]
+INSERTION_LEN_FREQ = [.05, .15, .15, .25, .15, .1, .1, .05]
+NUCLEOTIDES = ["G", "C", "A", "T"]
+NUCLEOTIDE_BIAS = [.35, .40, .15, .10]
 
-WT_seq = 'ATGCGATCAGATGCTACGTGCATGACAGATCA'
-fwd_read_file = 'C:/Users/Mason/Documents/simulation_output/fwd_reads.fastq'
-rev_read_file = 'C:/Users/Mason/Documents/simulation_output/rev_reads.fastq'
-
-fwd_rev_barcodes = [
-(["A", "G", "A", "A", "G"],["A", "G", "A", "A", "G", "T", "C", "T", "A", "A"]),
-(["T", "A", "C", "C", "T"],["T", "A", "C", "C", "T", "T", "G", "C", "T", "G", "G"]), 
-(["G", "T", "A", "G", "G"],["G", "T", "A", "G", "G", "C", "A", "A", "T"]),
-(["A", "C", "G", "T", "T"],["A", "C", "G", "T", "T", "C", "G", "A"]),
-(["C", "G", "T", "A", "A"],["G", "A", "A", "A", "T", "C", "C"]),
-(["G", "G", "A", "C", "T"],["C", "A", "G", "C", "G", "T", "A", "G"]),
-(["T", "A", "C", "C", "T"],["A", "G", "A", "A", "G", "T", "C", "T", "A", "A"]),
-(["G", "T", "A", "G", "G"],["T", "A", "C", "C", "T", "T", "G", "C", "T", "G", "G"]),
-(["A", "C", "G", "T", "T"],["G", "T", "A", "G", "G", "C", "A", "A", "T"]),
-(["C", "G", "T", "A", "A"],["A", "C", "G", "T", "T", "C", "G", "A"]),
-(["G", "G", "A", "C", "T"],["G", "A", "A", "A", "T", "C", "C"]),
-(["G", "T", "A", "G", "G"],["A", "G", "A", "A", "G", "T", "C", "T", "A", "A"]),
-(["A", "C", "G", "T", "T"],["T", "A", "C", "C", "T", "T", "G", "C", "T", "G", "G"]),
-(["C", "G", "T", "A", "A"],["G", "T", "A", "G", "G", "C", "A", "A", "T"]),
-(["G", "G", "A", "C", "T"],["A", "C", "G", "T", "T", "C", "G", "A"]),
-(["A", "G", "A", "A", "G"],["C", "A", "G", "C", "G", "T", "A", "G"])
-]
-
-illumina_adapter = [list('ACACTCTTTCCCTACACGACGCTCTTCCGATCT'), list('TTCAGACGTGTGCTCTTCCGATCT')]
-
-quality_scores = ["<", "=", ">", "?", "@", "A", "B", "C", "D", "E", "F", ":", ";"]
-
-##############Parameters###############
-initial_cell_count = 100
-num_of_generations = 3
-cut_freq = .40 
-insert_freq = .80
-del_freq = .20
-insertion_len_range = [0, 1, 2, 3, 4, 5]
-insertion_len_freq = [.15, .20, .20, .30, .10, .05]
-nucleotide_bias = [.35, .30, .20, .15]
-insert_pos = -8 ##39/40
-########################################
-
-def does_it_cut(cut_freq):
-	## Binary output to determine if a cut occurs, based on observed cutting frequency ##
-	cut = np.random.choice((1,0), p=[cut_freq, 1-cut_freq])
-	return cut
-
-def insertion_or_deletion(insert_freq, del_freq):
-	## Binary output if edit is an insertion or deletion, based on observed insertion and deletion frequencies ##
-	indel = np.random.choice((1,0), p=[insert_freq, del_freq])
-	return indel
-
-def split_cells(well_to_split):
-	## Simulates splitting of cells, roughly but not precisely 50-50 ##
-	next_well_1 = []
-	next_well_2 = []
-	for cell in well_to_split:
-		split = np.random.choice((1,0))
-		if split:
-			next_well_1.append(cell)
+#***********************************#
+#*********** CELL CLASS ************#
+#***********************************#
+class Cell():
+	
+	def __init__(self, well = "", parent = None, ins = [], createdAt = 0, eventLoop = {}, initLoop = {}, init=False):
+		self.id = "".join(list(np.random.choice(["G", "C", "A", "T"], size=20))) #TODO Check uniqueness
+		self.well = well
+		self.ins = ins
+		self.parent = parent
+		self.daughters = []
+		self.createdAt = createdAt
+		self.events = eventLoop #main simulation event loop
+		self.initLoop = initLoop #pre-simulation population growth loop
+		self.dividedAt = -1
+		self.removed = False
+		self.init = init
+		if not self.init:
+			self.future = self.predictFuture()
 		else:
-			next_well_2.append(cell)
-	return next_well_1, next_well_2
+			self.future = self.predictFuture(init=True)
+	
+	# TODO  	
+	def predictFuture(self, init=False):
+		dTime = self.createdAt + int(np.random.normal(24*60,120)) #normal distribution of HEK293T doubling time, mean: 24 hrs		
+		if not init:
+			self.createEvent(dTime,"division")
+		else: 
+			self.createEvent(dTime,"division", init=True)
 
-def which_nucleotide():
-	## Returns "random" nucleotide based on Tdt nucleotide bias ##
-	nucleotides = ["G", "C", "A", "T"]
-	inserted_nucleotide = np.random.choice(nucleotides, p=nucleotide_bias)
-	return inserted_nucleotide
 
-def cell_division(old_well):
-	## Simulates cell division ##
-	new_well = []
-	for x in range(0, len(old_well)):
-		new_well.extend([old_well[x], old_well[x]])
-	return new_well
-
-def cut_indel(well, cut_freq, insert_freq, del_freq):
-	## Simulates an editing event based on frequency of cutting, insertions, and deletions ##
-	new_well = []
-	for x in range(0, len(well)):
-		cell = well[x]
-		cut = does_it_cut(cut_freq)
-		if not cut:
-			new_well.append(cell)
-			continue
-		insertion = insertion_or_deletion(insert_freq, del_freq)
-		if insertion:
-			insertion_len = np.random.choice(insertion_len_range, p=insertion_len_freq)
-			for x in range(0, insertion_len):
-				nucleotide = which_nucleotide()
-				cell.insert(insert_pos, nucleotide)
-			new_well.append(cell)
+	def divide(self, divisionTime, init=False):
+		# Division occurs in two steps:
+		# 1) Create two new cell objects as the daughter cells, initialize them with the current dtime as their starting time
+		# 2) append those cells to this cells daughters array and return them so the LT sim can also keep track of them
+		if not init:
+			d1 = Cell(self.well, self, self.ins[:], divisionTime+1, self.events, self.initLoop)
+			d2 = Cell(self.well, self, self.ins[:], divisionTime+1, self.events, self.initLoop)
 		else:
-			for x in range(2, -1, -1):
-				del cell[insert_pos-x]
-			new_well.append(cell)
-	return new_well
+			d1 = Cell(self.well, self, self.ins[:], divisionTime+1, self.events, self.initLoop, init=True)
+			d2 = Cell(self.well, self, self.ins[:], divisionTime+1, self.events, self.initLoop, init=True)
+		self.daughters.append(d1)
+		self.daughters.append(d2)
+		return d1,d2
 
-def reverse_complement(seq):
-	## Generates reverse complement of target sequence ##
-	complement = {'A': 'T', 'C': 'G', 'G': 'C', 'T': 'A'}
-	reverse_seq = []
-	for base in seq[::-1]:
-		reverse_seq.append(complement[base])
-	return reverse_seq
+	def addInsertion(self, seq):
+		self.ins.append(seq)
 
-def barcode(well, fwd_illumina_adapter, rev_illumina_adapter, fwd_barcode, rev_barcode):
-	## Generates complete sequence to include illumina adapter and each barcode ##
-	fwd_seqs = []
-	rev_seqs = []
-	for cell in well:
-		umi = list(np.random.choice(["G", "C", "A", "T"], size=20))
-		fwd_seq = fwd_illumina_adapter + fwd_barcode + cell + umi + reverse_complement(rev_barcode) + reverse_complement(rev_illumina_adapter)
-		rev_seq = reverse_complement(fwd_seq)
-		fwd_seqs.append(fwd_seq)
-		rev_seqs.append(rev_seq)
-	return fwd_seqs, rev_seqs
 
-def cell_cycle(well, cut_freq, insert_freq, del_freq):
-	## Ideal cell cycle with a possible editing event before cell division ##
-	well = cell_division(cut_indel(well, cut_freq, insert_freq, del_freq))
-	return well
+	def createEvent(self, time, event, init=False):
+		if not init: # we're in the main loop of the simulation
+			try:
+				self.events[time][self.id] = event #there's already an event at this time
+			except:
+				self.events[time] = {self.id:event} #if not, create it.
+		else: # we're in the pre-simulation population expansion
+			try:
+				self.initLoop[time][self.id] = event
+			except:
+				self.initLoop[time] = {self.id:event}
 
-def generate_fastq(read_file, seq_list):
-	## Writes out to a text file in fastq format ##
-	with open(read_file, 'w') as file:
-		date = datetime.now().strftime('%H:%M:%S')
-		for seq in seq_list:
-			file.write('@:' + date + '\n')
-			file.write(seq + '\n')
-			file.write('+\n')
-			for x in range(0, len(seq)):
-				file.write(str(np.random.choice(quality_scores)))
-			file.write('\n')
+	# def addWell(self, wellNum):
+		# self.well += wellNum
 
-def pcr(seq):
-	## Simulates NGS error rate during amplification ##
-	amplicon = []
-	for x in range(0, len(seq)):
-		mutation = np.random.choice([1,0], p=[.001, .999]) ##NGS mutation rate
-		if not mutation:
-			amplicon.append(seq[x])
+	def __str__(self):
+		return self.id
+
+#***********************************#
+#******** SIMULATION CLASS *********#
+#***********************************#
+class LTSimulation():
+
+	def __init__(self, parameters=None):
+		self.parameters = {
+							"tickTime":1, #1 minute Ticks
+							"splits":2,
+							"initialCellCount": 10000,
+							"totalTime": 0,
+							"totalTicks":0,
+							"concurrentLineages":4,
+							"splitSize":3
+							}
+		if parameters:
+			for parameter in parameters:
+				self.parameters[parameter] = parameters[parameter]
+		self.parameters["totalTime"] = int(60*24*(self.parameters["splits"]+2))
+		self.parameters["totalTicks"] = int(self.parameters["totalTime"]/self.parameters["tickTime"])
+		self.removedCells = {}
+		self.events = {}
+		self.init = {}
+		self.initialCell = Cell("init", None, [], 0, self.events, self.init, init=True)
+		self.cells = {self.initialCell.id:self.initialCell}
+		# self.rootWells = [Well(str(x), None) for x in range(self.concurrentLineages)]
+		for split in self.parameters['split_times']:
+			self.events[split] = {'SPLIT':self.parameters['split_times'].index(split)+1}
+		# self.wells = {"0":self.rootWell}
+		# self.createWells()
+		self.currentTick = 0
+
+	# def createWells(self):
+	# 	q = []
+	# 	q.append(x for x in self.rootWells)
+	# 	while q:
+	# 		well = q.pop(0)
+	# 		d1 = Well(well.id+"0", well)
+	# 		d2 = Well(well.id+"1", well)
+	# 		well.children[d1.id] = d1
+	# 		well.children[d2.id] = d2
+	# 		self.wells[d1.id] = d1
+	# 		self.wells[d2.id] = d2
+	# 		if len(well.id) < self.parameters["splits"]:
+	# 			q.append(d1)
+	# 			q.append(d2)
+
+	def divideCell(self, cellid, divisionTime, init=False): # **only function with cell.id as argument, all others have cell object**
+		cell = self.cells[cellid]
+		cell.removed = True
+		cell.dividedAt = divisionTime
+		if not init:
+			d1,d2 = cell.divide(divisionTime)
+			self.editCell(d1)
+			self.editCell(d2)
 		else:
-			amplicon.append(np.random.choice(["G", "C", "A", "T"]))
-	return amplicon
+			d1,d2 = cell.divide(divisionTime, init=True)
+		self.cells[d1.id] = d1
+		self.cells[d2.id] = d2
+		# self.wells[d1.well].cells[d1.id] = d1
+		# self.wells[d2.well].cells[d2.id] = d2
 
-def amplify(seq_list):
-	## Simulates NGS amplification over a range ##
-	amplified_seqs = []
-	for seq in seq_list:
-		num = np.random.choice(range(20, 40))
-		for x in range(0, num):
-			amplified_seqs.append(pcr(seq))
-	return amplified_seqs
+	def editCell(self,cell):
+		'''	1) Determine if there's an edit
+				1a)	If there's an insertion, (2)
+				1b) If there's a deletion, mark the cell as 'removed'
+			2) Determine the insertion length based on the ins len frequency
+			3) Determine the nucleotides that get added based on TdT's bais.'''
+
+		insLength = len("".join(cell.ins))
+		eChance = 50 if not insLength else 75/(.5*insLength) #chance of a cut as a function of insertion length (stgRNA length)
+		eDist = np.random.normal(eChance,math.sqrt(eChance))/100 #normal distribution of edit chance, mean of eChance, to determine if an edit occurs
+		
+		if eDist <= 0: ## adjusting for edge cases which would make the downstream insertion probability negative
+			eDist = 0
+		elif eDist >= 1:
+			eDist = 1
+
+		if np.random.choice((0,1),p=[1-eDist,eDist]): #there's an edit
+			if np.random.choice((0,1), p=[0.2,0.8]): #there's an insert
+				seq = ''
+				for x in range(np.random.choice(INSERTION_LEN_RANGE, p=INSERTION_LEN_FREQ)): #determine the insertion length
+					seq += np.random.choice(NUCLEOTIDES, p=NUCLEOTIDE_BIAS) #insertion sequence
+				cell.addInsertion(seq)
+			else: #Deletion
+				cell.removed = True
+
+	def populateRoots(self): #split initial cells into each lineage's root well
+		for cell in self.cells:
+			cell = self.cells[cell]
+			well = np.random.choice(range(self.parameters["concurrentLineages"]))
+			cell.well = str(well)
+
+	def splitCells(self, splitNumber):
+		for cellId in self.cells:
+			cell = self.cells[cellId]
+			if not cell.removed:
+				cell.well += str(np.random.choice(range(self.parameters["splitSize"])))
+
+	def exportData(self, fileName):
+		wellMapping = {}
+		i = 1
+		for x in range(self.parameters["concurrentLineages"]):
+			for y, z in product(range(self.parameters["splitSize"]), range(self.parameters["splitSize"])):
+				wellMapping[str(x)+str(y)+str(z)] = f'well_{x}{y}{z}'
+				i += 1
+		insDict = {}
+		for c in self.cells:
+			cell = self.cells[c]
+			if not cell.removed and cell.ins:
+				ins = "".join(cell.ins)
+				if cell.well in wellMapping:
+					well = wellMapping[cell.well]
+					if ins not in insDict:
+						insDict[ins] = {"umis":{well:[]}, "counts":{well:1}}
+						insDict[ins]["umis"][well].append(cell.id)
+					else:
+						if well not in insDict[ins]["umis"] and well not in insDict[ins]["counts"]:
+							insDict[ins]["umis"][well] = []
+							insDict[ins]["umis"][well].append(cell.id)
+							insDict[ins]["counts"][well] = 1
+						else:
+							insDict[ins]["umis"][well].append(cell.id)
+							insDict[ins]["counts"][well] += 1
+		with open(fileName,'wb') as fname:
+			print("Saving to file....")
+			pickle.dump(insDict ,fname)
+
+	def printCells(self):
+		for cell in self.cells:
+			print(cell)
+
+	def getSimulationTime(self):
+		return self.parameters["totalTime"]
+
+	def getTickTime(self):
+		self.parameters["tickTime"]
+
+	def getActiveCells(self):
+		return len([x for x in self.cells if not self.cells[x].removed])
+
+	def getTotalCells(self):
+		return len(self.cells)
+
+	def getMaxTicks(self):
+		return self.parameters["totalTicks"]
+
+#***********************************#
+#******** 	  WELL CLASS   *********#
+#***********************************#
+class Well():
+	def __init__(self, name, parent):
+		self.id = name
+		self.parent = parent
+		self.children = {}
+		self.cells = {}
 
 
-def convert_to_str(seq_list):
-	## Seqs as list of characters => seqs as strings to write out to file ##
-	seqs_as_str = []
-	for seq in seq_list:
-		seqs_as_str.append("".join(seq))
-	return seqs_as_str
-
-def seq_filter(seq_list):
-	## Number of unique molecules collected in sample ##
-	chosen_seqs = []
-	for seq in seq_list:
-		keep = np.random.choice([1,0], p=[.2, .8])
-		if keep:
-			chosen_seqs.append(seq)
-	return chosen_seqs
-
-
-wells = []
-for num in range(0, (2**num_of_generations)-1):
-	wells.append([])
-
-for x in range(0, initial_cell_count):
-	wells[0].append(list(WT_seq))
-
-for i, well in enumerate(wells):
-	if i == 0:
-		wells[0] = cell_cycle(wells[0], cut_freq, insert_freq, del_freq)
-		wells[1], wells[2] = split_cells(well)
-	else:
-		wells[i] = cell_cycle(well, cut_freq, insert_freq, del_freq)
-		if ((2*i)+2) <= len(wells):
-			wells[(2*i)+1], wells[(2*i)+2] = split_cells(wells[i])
-
-
-last_generation = []
-for i in range(0, (2**num_of_generations)//2):
-	last_generation.append([])
-print(len(last_generation))
-
-for i in range(int(-1*(np.rint(len(wells)/2))), 0):
-	last_generation[i] = seq_filter(wells[i])
-
-fwd_barcoded_seqs = []
-rev_barcoded_seqs = []
-for i, (x, y) in enumerate(fwd_rev_barcodes):
-	if i < len(last_generation):
-		fwd_well, rev_well = barcode(last_generation[i], illumina_adapter[0], illumina_adapter[1], x, y)
-		fwd_barcoded_seqs += amplify(fwd_well)
-		rev_barcoded_seqs += amplify(rev_well)
-
-fwd_reads = convert_to_str(fwd_barcoded_seqs)
-rev_reads = convert_to_str(rev_barcoded_seqs)
-
-generate_fastq(fwd_read_file, fwd_reads)
-generate_fastq(rev_read_file, rev_reads)
